@@ -1,0 +1,878 @@
+package org.fog.test.perfeval;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Random;
+
+import org.cloudbus.cloudsim.Host;
+import org.cloudbus.cloudsim.Log;
+import org.cloudbus.cloudsim.Pe;
+import org.cloudbus.cloudsim.Storage;
+import org.cloudbus.cloudsim.core.CloudSim;
+import org.cloudbus.cloudsim.power.PowerHost;
+import org.cloudbus.cloudsim.provisioners.RamProvisionerSimple;
+import org.cloudbus.cloudsim.sdn.overbooking.BwProvisionerOverbooking;
+import org.cloudbus.cloudsim.sdn.overbooking.PeProvisionerOverbooking;
+import org.fog.application.AppEdge;
+import org.fog.application.AppLoop;
+import org.fog.application.Application;
+import org.fog.application.selectivity.FractionalSelectivity;
+import org.fog.entities.Actuator;
+import org.fog.entities.FogBroker;
+import org.fog.entities.FogDevice;
+import org.fog.entities.FogDeviceCharacteristics;
+import org.fog.entities.Sensor;
+import org.fog.entities.Tuple;
+import org.fog.placement.Controller;
+import org.fog.placement.ModuleMapping;
+import org.fog.placement.ModulePlacementEdgewards;
+import org.fog.placement.ModulePlacementMapping;
+import org.fog.policy.AppModuleAllocationPolicy;
+import org.fog.scheduler.StreamOperatorScheduler;
+import org.fog.utils.FogLinearPowerModel;
+import org.fog.utils.FogUtils;
+import org.fog.utils.TimeKeeper;
+import org.fog.utils.distribution.DeterministicDistribution;
+
+//Healthcare Workflows Application:  DRLBTS Framework
+
+public class Healthcare_Simulation {
+	static List<FogDevice> fogDevices = new ArrayList<FogDevice>();
+	static List<Sensor> sensors = new ArrayList<Sensor>();
+	static List<Actuator> actuators = new ArrayList<Actuator>();
+	static int numOfAreas = 1;
+	static int numOfCamerasPerArea = 4;
+	private final double alpha = 0.1; // Learning rate
+    private final double gamma = 0.9; // Eagerness - 0 looks in the near future, 1 looks in the distant future
+    public Blockchain POV; 
+    private final int mazeWidth = 3;
+    private final int mazeHeight = 3;
+    private final int statesCount = mazeHeight * mazeWidth;
+
+    private final int reward = 100;
+    private final int penalty = -10;
+
+    private char[][] maze;  // Maze read from file
+    private int[][] R;       // Reward lookup
+    private double[][] Q;    // Q learning
+
+
+	private static boolean CLOUD = false;
+	
+	public static void main(String[] args) {
+
+		Log.printLine("Starting Simulation...");
+		System.out.println("Simulation Parameters");
+		System.out.println("Data: Spatial Realtime Sensor Data by IoT Healthcare Sensors");
+		System.out.println("Application is Healthcare IoT Surveillance");
+		System.out.println("Dataset:Location, Camera, Video, Location");
+		System.out.println("Computing Nodes:Healthcare, Fog Devices, Cloud Computing");
+		System.out.println("Blockchain-Validation: Data execute on different nodes and validated by Blockchain Scheme");
+		System.out.println("Reinforcement Enabled Scheduler Policy");
+		System.out.println("Simulation will take minutes for the process, need to wait..............");
+		try {
+			Thread.sleep(15000);
+		} catch (InterruptedException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		
+
+		try {
+			Log.disable();
+			int num_user = 1; // number of cloud users
+			Calendar calendar = Calendar.getInstance();
+			boolean trace_flag = false; // mean trace events
+
+			CloudSim.init(num_user, calendar, trace_flag);
+
+			String appId = "dcns"; // identifier of the application
+			
+			FogBroker broker = new FogBroker("broker");
+			
+			Application application = createApplication(appId, broker.getId());
+			application.setUserId(broker.getId());
+			
+			createFogDevices(broker.getId(), appId);
+			
+			Controller controller = null;
+			
+			ModuleMapping moduleMapping = ModuleMapping.createModuleMapping(); // initializing a module mapping
+			for(FogDevice device : fogDevices){
+				if(device.getName().startsWith("m")){ // names of all Smart Cameras start with 'm' 
+					moduleMapping.addModuleToDevice("motion_detector", device.getName());  // fixing 1 instance of the Motion Detector module to each Smart Camera
+				}
+			}
+			moduleMapping.addModuleToDevice("user_interface", "cloud"); // fixing instances of User Interface module in the Cloud
+			if(CLOUD){
+				// if the mode of deployment is cloud-based
+				moduleMapping.addModuleToDevice("object_detector", "cloud"); // placing all instances of Object Detector module in the Cloud
+				moduleMapping.addModuleToDevice("object_tracker", "cloud"); // placing all instances of Object Tracker module in the Cloud
+			}
+			
+			controller = new Controller("master-controller", fogDevices, sensors, 
+					actuators);
+			
+			controller.submitApplication(application, 
+					(CLOUD)?(new ModulePlacementMapping(fogDevices, application, moduleMapping))
+							:(new ModulePlacementEdgewards(fogDevices, sensors, actuators, application, moduleMapping)));
+			
+			TimeKeeper.getInstance().setSimulationStartTime(Calendar.getInstance().getTimeInMillis());
+			
+			CloudSim.startSimulation();
+
+			CloudSim.stopSimulation();
+
+			Log.printLine("Scheduling finished!");
+			String originalString = "";
+			
+			// Call encryption method
+			String encryptedString
+				= AES.encrypt(originalString);
+			
+			// Call decryption method
+			String decryptedString
+				= AES.decrypt(encryptedString);
+
+			// Print all strings
+			System.out.println(originalString);
+			System.out.println(encryptedString);
+			System.out.println(decryptedString);
+	        String[] genesisTransactions = {"Healthcare Sent Data to the Fog Node"};
+	        Block genesisBlock = new Block(0, genesisTransactions);
+
+	        String[] block2Transactions = {"Fog node sent data to the Cloud"};
+	        Block block2 = new Block(genesisBlock.getBlockHash(), block2Transactions);
+
+	        String[] block3Transactions = {"Fog to Fog Data Processing"};
+	        Block block3 = new Block(block2.getBlockHash(), block3Transactions);
+
+	        System.out.println("Iot-Blockchain Validation:");
+	        System.out.println(genesisBlock.getBlockHash());
+
+	        System.out.println("Fog Blockchain Validation:");
+	        System.out.println(block2.getBlockHash());
+
+	        System.out.println("Cloud-Blockchain-Validation:");
+	        System.out.println(block3.getBlockHash());
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			Log.printLine("Unwanted errors happen");
+		}
+	
+	
+	Reinforcement_Healthcare_Fog_Cloud ql = new Reinforcement_Healthcare_Fog_Cloud();
+
+    ql.init();
+    ql.calculateQ();
+    ql.printQ();
+    ql.printPolicy();
+}
+//Reinforcement Enabled Scheduling Best on Optimal Policy, Q-Learning and Value Function
+public void init() {
+    File file = new File("G:\\2020-New-Papers-Journal\\simulator\\Final-Blockchain-Big-Data-Simulator\\iFogSim-main\\dataset\\Healthcare-fog-cloud.txt");
+
+    R = new int[statesCount][statesCount];
+    Q = new double[statesCount][statesCount];
+    maze = new char[mazeHeight][mazeWidth];
+
+
+    try (FileInputStream fis = new FileInputStream(file)) {
+
+        int i = 0;
+        int j = 0;
+
+        int content;
+
+        // Read the maze from the input file
+        while ((content = fis.read()) != -1) {
+            char c = (char) content;
+            if (c != '0' && c != 'F' && c != 'X') {
+                continue;
+            }
+            maze[i][j] = c;
+            j++;
+            if (j == mazeWidth) {
+                j = 0;
+                i++;
+            }
+        }
+
+        // We will navigate through the reward matrix R using k index
+        for (int k = 0; k < statesCount; k++) {
+
+            // We will navigate with i and j through the maze, so we need
+            // to translate k into i and j
+            i = k / mazeWidth;
+            j = k - i * mazeWidth;
+
+            // Fill in the reward matrix with -1
+            for (int s = 0; s < statesCount; s++) {
+                R[k][s] = -1;
+            }
+
+            // If not in final state or a wall try moving in all directions in the maze
+            if (maze[i][j] != 'F') {
+
+                // Try to move left in the maze
+                int goLeft = j - 1;
+                if (goLeft >= 0) {
+                    int target = i * mazeWidth + goLeft;
+                    if (maze[i][goLeft] == '0') {
+                        R[k][target] = 0;
+                    } else if (maze[i][goLeft] == 'F') {
+                        R[k][target] = reward;
+                    } else {
+                        R[k][target] = penalty;
+                    }
+                }
+
+                // Try to move right in the maze
+                int goRight = j + 1;
+                if (goRight < mazeWidth) {
+                    int target = i * mazeWidth + goRight;
+                    if (maze[i][goRight] == '0') {
+                        R[k][target] = 0;
+                    } else if (maze[i][goRight] == 'F') {
+                        R[k][target] = reward;
+                    } else {
+                        R[k][target] = penalty;
+                    }
+                }
+
+                // Try to move up in the maze
+                int goUp = i - 1;
+                if (goUp >= 0) {
+                    int target = goUp * mazeWidth + j;
+                    if (maze[goUp][j] == '0') {
+                        R[k][target] = 0;
+                    } else if (maze[goUp][j] == 'F') {
+                        R[k][target] = reward;
+                    } else {
+                        R[k][target] = penalty;
+                    }
+                }
+
+                // Try to move down in the maze
+                int goDown = i + 1;
+                if (goDown < mazeHeight) {
+                    int target = goDown * mazeWidth + j;
+                    if (maze[goDown][j] == '0') {
+                        R[k][target] = 0;
+                    } else if (maze[goDown][j] == 'F') {
+                        R[k][target] = reward;
+                    } else {
+                        R[k][target] = penalty;
+                    }
+                }
+            }
+        }
+        initializeQ();
+        printR(R);
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
+//Set Q values to R values
+void initializeQ()
+{
+    for (int i = 0; i < statesCount; i++){
+        for(int j = 0; j < statesCount; j++){
+            Q[i][j] = (double)R[i][j];
+        }
+    }
+}
+// Used for debug
+void printR(int[][] matrix) {
+    System.out.printf("%25s", "States: ");
+    for (int i = 0; i <= 8; i++) {
+        System.out.printf("%4s", i);
+    }
+    System.out.println();
+
+    for (int i = 0; i < statesCount; i++) {
+        System.out.print("Possible states from " + i + " :[");
+        for (int j = 0; j < statesCount; j++) {
+            System.out.printf("%4s", matrix[i][j]);
+        }
+        System.out.println("]");
+    }
+}
+
+void calculateQ() {
+    Random rand = new Random();
+
+    for (int i = 0; i < 1000; i++) { // Train cycles
+        // Select random initial state
+        int crtState = rand.nextInt(statesCount);
+
+        while (!isFinalState(crtState)) {
+            int[] actionsFromCurrentState = possibleActionsFromState(crtState);
+
+            // Pick a random action from the ones possible
+            int index = rand.nextInt(actionsFromCurrentState.length);
+            int nextState = actionsFromCurrentState[index];
+
+            // Q(state,action)= Q(state,action) + alpha * (R(state,action) + gamma * Max(next state, all actions) - Q(state,action))
+            double q = Q[crtState][nextState];
+            double maxQ = maxQ(nextState);
+            int r = R[crtState][nextState];
+
+            double value = q + alpha * (r + gamma * maxQ - q);
+            Q[crtState][nextState] = value;
+
+            crtState = nextState;
+        }
+    }
+}
+
+boolean isFinalState(int state) {
+    int i = state / mazeWidth;
+    int j = state - i * mazeWidth;
+
+    return maze[i][j] == 'F';
+}
+
+int[] possibleActionsFromState(int state) {
+    ArrayList<Integer> result = new ArrayList<>();
+    for (int i = 0; i < statesCount; i++) {
+        if (R[state][i] != -1) {
+            result.add(i);
+        }
+    }
+
+    return result.stream().mapToInt(i -> i).toArray();
+}
+
+double maxQ(int nextState) {
+    int[] actionsFromState = possibleActionsFromState(nextState);
+    //the learning rate and eagerness will keep the W value above the lowest reward
+    double maxValue = -10;
+    for (int nextAction : actionsFromState) {
+        double value = Q[nextState][nextAction];
+
+        if (value > maxValue)
+            maxValue = value;
+    }
+    return maxValue;
+}
+
+void printPolicy() {
+    System.out.println("\nPrint policy");
+    for (int i = 0; i < statesCount; i++) {
+        System.out.println("From state " + i + " goto state " + getPolicyFromState(i));
+    }
+}
+
+int getPolicyFromState(int state) {
+    int[] actionsFromState = possibleActionsFromState(state);
+
+    double maxValue = Double.MIN_VALUE;
+    int policyGotoState = state;
+
+    // Pick to move to the state that has the maximum Q value
+    for (int nextState : actionsFromState) {
+        double value = Q[state][nextState];
+
+        if (value > maxValue) {
+            maxValue = value;
+            policyGotoState = nextState;
+        }
+    }
+    return policyGotoState;
+}
+
+ void printQ() {
+    System.out.println("Q matrix");
+    for (int i = 0; i < Q.length; i++) {
+        System.out.print("From state " + i + ":  ");
+        for (int j = 0; j < Q[i].length; j++) {
+            System.out.printf("%6.2f ", (Q[i][j]));
+        }
+        System.out.println();
+    }
+ }
+	/**
+	 * Creates the fog devices in the physical topology of the simulation.
+	 * @param userId
+	 * @param appId
+	 */
+	private static void createFogDevices(int userId, String appId) {
+		FogDevice cloud = createFogDevice("cloud", 44800, 40000, 100, 10000, 0, 0.01, 16*103, 16*83.25);
+		cloud.setParentId(-1);
+		fogDevices.add(cloud);
+		FogDevice proxy = createFogDevice("proxy-server", 2800, 4000, 10000, 10000, 1, 0.0, 107.339, 83.4333);
+		proxy.setParentId(cloud.getId());
+		proxy.setUplinkLatency(100); // latency of connection between proxy server and cloud is 100 ms
+		fogDevices.add(proxy);
+		for(int i=0;i<numOfAreas;i++){
+			addArea(i+"", userId, appId, proxy.getId());
+		}
+	}
+
+	private static FogDevice addArea(String id, int userId, String appId, int parentId){
+		FogDevice router = createFogDevice("state-policy-"+id, 2800, 4000, 10000, 10000, 1, 0.0, 107.339, 83.4333);
+		fogDevices.add(router);
+		router.setUplinkLatency(2); // latency of connection between router and proxy server is 2 ms
+		for(int i=0;i<numOfCamerasPerArea;i++){
+			String mobileId = id+"-"+i;
+			FogDevice camera = addCamera(mobileId, userId, appId, router.getId()); // adding a smart camera to the physical topology. Smart cameras have been modeled as fog devices as well.
+			camera.setUplinkLatency(2); // latency of connection between camera and router is 2 ms
+			fogDevices.add(camera);
+		}
+		router.setParentId(parentId);
+		return router;
+	}
+	
+	private static FogDevice addCamera(String id, int userId, String appId, int parentId){
+		FogDevice camera = createFogDevice("state-policy-"+id, 500, 1000, 10000, 10000, 3, 0, 87.53, 82.44);
+		camera.setParentId(parentId);
+		Sensor sensor = new Sensor("Q-Learning-"+id, "CAMERA", userId, appId, new DeterministicDistribution(5)); // inter-transmission time of camera (sensor) follows a deterministic distribution
+		sensors.add(sensor);
+		Actuator ptz = new Actuator("ptz-"+id, userId, appId, "PTZ_CONTROL");
+		actuators.add(ptz);
+		sensor.setGatewayDeviceId(camera.getId());
+		sensor.setLatency(1.0);  // latency of connection between camera (sensor) and the parent Smart Camera is 1 ms
+		ptz.setGatewayDeviceId(camera.getId());
+		ptz.setLatency(1.0);  // latency of connection between PTZ Control and the parent Smart Camera is 1 ms
+		return camera;
+	}
+	
+	/**
+	 * Creates Surviellance fog device
+	 * @param nodeName name of the device to be used in simulation
+	 * @param mips MIPS
+	 * @param ram RAM
+	 * @param upBw uplink bandwidth
+	 * @param downBw downlink bandwidth
+	 * @param level hierarchy level of the device
+	 * @param ratePerMips cost rate per MIPS used
+	 * @param busyPower
+	 * @param idlePower
+	 * @return
+	 */
+	
+
+	
+	private static FogDevice createFogDevice(String nodeName, long mips,
+			int ram, long upBw, long downBw, int level, double ratePerMips, double busyPower, double idlePower) {
+		
+		List<Pe> peList = new ArrayList<Pe>();
+
+		// 3. Create PEs and add these into a list.
+		peList.add(new Pe(0, new PeProvisionerOverbooking(mips))); // need to store Pe id and MIPS Rating
+
+		int hostId = FogUtils.generateEntityId();
+		long storage = 1000000; // host storage
+		int bw = 10000;
+
+		PowerHost host = new PowerHost(
+				hostId,
+				new RamProvisionerSimple(ram),
+				new BwProvisionerOverbooking(bw),
+				storage,
+				peList,
+				new StreamOperatorScheduler(peList),
+				new FogLinearPowerModel(busyPower, idlePower)
+			);
+
+		List<Host> hostList = new ArrayList<Host>();
+		hostList.add(host);
+
+		String arch = "x86"; // system architecture
+		String os = "Linux"; // operating system
+		String vmm = "Xen";
+		double time_zone = 10.0; // time zone this resource located
+		double cost = 3.0; // the cost of using processing in this resource
+		double costPerMem = 0.05; // the cost of using memory in this resource
+		double costPerStorage = 0.001; // the cost of using storage in this
+										// resource
+		double costPerBw = 0.0; // the cost of using bw in this resource
+		LinkedList<Storage> storageList = new LinkedList<Storage>(); // we are not adding SAN
+													// devices by now
+
+		FogDeviceCharacteristics characteristics = new FogDeviceCharacteristics(
+				arch, os, vmm, host, time_zone, cost, costPerMem,
+				costPerStorage, costPerBw);
+
+		FogDevice fogdevice = null;
+		try {
+			fogdevice = new FogDevice(nodeName, characteristics, 
+					new AppModuleAllocationPolicy(hostList), storageList, 10, upBw, downBw, 0, ratePerMips);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		
+		fogdevice.setLevel(level);
+		return fogdevice;
+	}
+
+	/**
+	 * Function to create the Intelligent Surveillance application in the DDF model. 
+	 * @param appId unique identifier of the application
+	 * @param userId identifier of the user of the application
+	 * @return
+	 */
+	@SuppressWarnings({"serial" })
+	private static Application createApplication(String appId, int userId){
+		
+		Application application = Application.createApplication(appId, userId);
+		/*
+		 * Adding modules (vertices) to the application model (directed graph)
+		 */
+		application.addAppModule("object_detector", 10);
+		application.addAppModule("motion_detector", 10);
+		application.addAppModule("object_tracker", 10);
+		application.addAppModule("user_interface", 10);
+		
+		/*
+		 * Connecting the application modules (vertices) in the application model (directed graph) with edges
+		 */
+		application.addAppEdge("CAMERA", "motion_detector", 1000, 20000, "CAMERA", Tuple.UP, AppEdge.SENSOR); // adding edge from CAMERA (sensor) to Motion Detector module carrying tuples of type CAMERA
+		application.addAppEdge("motion_detector", "object_detector", 2000, 2000, "MOTION_VIDEO_STREAM", Tuple.UP, AppEdge.MODULE); // adding edge from Motion Detector to Object Detector module carrying tuples of type MOTION_VIDEO_STREAM
+		application.addAppEdge("object_detector", "user_interface", 500, 2000, "DETECTED_OBJECT", Tuple.UP, AppEdge.MODULE); // adding edge from Object Detector to User Interface module carrying tuples of type DETECTED_OBJECT
+		application.addAppEdge("object_detector", "object_tracker", 1000, 100, "OBJECT_LOCATION", Tuple.UP, AppEdge.MODULE); // adding edge from Object Detector to Object Tracker module carrying tuples of type OBJECT_LOCATION
+		application.addAppEdge("object_tracker", "PTZ_CONTROL", 100, 28, 100, "PTZ_PARAMS", Tuple.DOWN, AppEdge.ACTUATOR); // adding edge from Object Tracker to PTZ CONTROL (actuator) carrying tuples of type PTZ_PARAMS
+		
+		/*
+		 * Defining the input-output relationships (represented by selectivity) of the application modules. 
+		 */
+		application.addTupleMapping("motion_detector", "CAMERA", "MOTION_VIDEO_STREAM", new FractionalSelectivity(1.0)); // 1.0 tuples of type MOTION_VIDEO_STREAM are emitted by Motion Detector module per incoming tuple of type CAMERA
+		application.addTupleMapping("object_detector", "MOTION_VIDEO_STREAM", "OBJECT_LOCATION", new FractionalSelectivity(1.0)); // 1.0 tuples of type OBJECT_LOCATION are emitted by Object Detector module per incoming tuple of type MOTION_VIDEO_STREAM
+		application.addTupleMapping("object_detector", "MOTION_VIDEO_STREAM", "DETECTED_OBJECT", new FractionalSelectivity(0.05)); // 0.05 tuples of type MOTION_VIDEO_STREAM are emitted by Object Detector module per incoming tuple of type MOTION_VIDEO_STREAM
+	
+		/*
+		 * Defining application loops (maybe incomplete loops) to monitor the latency of. 
+		 * Here, we add two loops for monitoring : Motion Detector -> Object Detector -> Object Tracker and Object Tracker -> PTZ Control
+		 */
+		final AppLoop loop1 = new AppLoop(new ArrayList<String>(){{add("motion_detector");add("object_detector");add("object_tracker");}});
+		final AppLoop loop2 = new AppLoop(new ArrayList<String>(){{add("object_tracker");add("PTZ_CONTROL");}});
+		List<AppLoop> loops = new ArrayList<AppLoop>(){{add(loop1);add(loop2);}};
+		
+		application.setLoops(loops);
+		return application;
+	}
+}
+
+
+public class CardiovascularHealthMonitoringApplication {
+    static List<FogDevice> fogDevices = new ArrayList<FogDevice>();
+    static List<Sensor> sensors = new ArrayList<Sensor>();
+    static List<Actuator> actuators = new ArrayList<Actuator>();
+
+    static Map<Integer, Integer> userMobilityPattern = new HashMap<Integer, Integer>();
+    static LocationHandler locator;
+
+    static boolean CLOUD = false;
+
+    static double SENSOR_TRANSMISSION_TIME = 10;
+    static int numberOfMobileUser = 5;
+
+    //cluster link latency 2ms
+    static Double clusterLatency = 2.0;
+
+    // TODO: 8/8/2021  not required for this scenario
+    // if random mobility generator for users is True, new random dataset will be created for each user
+    static boolean randomMobility_generator = true; // To use random datasets
+    static boolean renewDataset = false; // To overwrite existing random datasets
+    static List<Integer> clusteringLevels = new ArrayList<Integer>(); // The selected fog layers for clustering
+
+
+    public static void main(String[] args) {
+
+        Log.printLine("Starting Cardiovascular Health Monitoring Application...");
+
+        try {
+
+            Log.disable();
+            int num_user = 1; // number of cloud users
+            Calendar calendar = Calendar.getInstance();
+            boolean trace_flag = false; // mean trace events
+
+            CloudSim.init(num_user, calendar, trace_flag);
+
+            String appId = "Cardiovascular Health Monitoring Application CHM)"; // identifier of the application
+
+            FogBroker broker = new FogBroker("broker");
+
+            Application application = createApplication(appId, broker.getId());
+            application.setUserId(broker.getId());
+
+            DataParser dataObject = new DataParser();
+            locator = new LocationHandler(dataObject);
+
+            String datasetReference = References.dataset_reference;
+
+            if (randomMobility_generator) {
+                datasetReference = References.dataset_random;
+                createRandomMobilityDatasets(References.random_walk_mobility_model, datasetReference, renewDataset);
+            }
+
+            createMobileUser(broker.getId(), application, datasetReference);
+            createFogDevices(broker.getId(), application);
+
+            List<Integer> clusterLevelIdentifier = new ArrayList<>();
+            clusterLevelIdentifier.add(2);
+
+            /**
+             * Central controller for performing preprocessing functions
+             */
+            List<Application> appList = new ArrayList<>();
+            appList.add(application);
+
+
+            int placementAlgo = PlacementLogicFactory.CLUSTERED_MICROSERVICES_PLACEMENT;
+            MicroservicesMobilityClusteringController microservicesController = new MicroservicesMobilityClusteringController("controller", fogDevices, sensors, appList, clusterLevelIdentifier, clusterLatency, placementAlgo,locator);
+
+            // generate placement requests
+            List<PlacementRequest> placementRequests = new ArrayList<>();
+            for (Sensor s : sensors) {
+                Map<String, Integer> placedMicroservicesMap = new HashMap<>();
+                placedMicroservicesMap.put("clientModule", s.getGatewayDeviceId());
+                PlacementRequest p = new PlacementRequest(s.getAppId(), s.getId(), s.getGatewayDeviceId(), placedMicroservicesMap);
+                placementRequests.add(p);
+            }
+
+            microservicesController.submitPlacementRequests(placementRequests, 1);
+
+            TimeKeeper.getInstance().setSimulationStartTime(Calendar.getInstance().getTimeInMillis());
+
+            CloudSim.startSimulation();
+
+            CloudSim.stopSimulation();
+
+            Log.printLine("CHM app finished!");
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.printLine("Unwanted errors happen");
+        }
+    }
+
+    private static void createRandomMobilityDatasets(int mobilityModel, String datasetReference, boolean renewDataset) throws IOException, ParseException {
+        RandomMobilityGenerator randMobilityGenerator = new RandomMobilityGenerator();
+        for (int i = 0; i < numberOfMobileUser; i++) {
+
+            randMobilityGenerator.createRandomData(mobilityModel, i + 1, datasetReference, renewDataset);
+        }
+    }
+
+    /**
+     * Creates the fog devices in the physical topology of the simulation.
+     *
+     * @param userId
+     */
+    private static void createFogDevices(int userId, Application app) throws NumberFormatException, IOException {
+        locator.parseResourceInfo();
+
+
+        if (locator.getLevelWiseResources(locator.getLevelID("Cloud")).size() == 1) {
+
+            FogDevice cloud = createFogDevice("cloud", 44800, 40000, 100, 10000, 0.01, 16 * 103, 16 * 83.25, MicroserviceFogDevice.CLOUD); // creates the fog device Cloud at the apex of the hierarchy with level=0
+            cloud.setParentId(References.NOT_SET);
+            locator.linkDataWithInstance(cloud.getId(), locator.getLevelWiseResources(locator.getLevelID("Cloud")).get(0));
+            cloud.setLevel(0);
+            fogDevices.add(cloud);
+
+            for (int i = 0; i < locator.getLevelWiseResources(locator.getLevelID("Proxy")).size(); i++) {
+
+                FogDevice proxy = createFogDevice("proxy-server_" + i, 2800, 4000, 10000, 10000, 0.0, 107.339, 83.4333, MicroserviceFogDevice.FON); // creates the fog device Proxy Server (level=1)
+                locator.linkDataWithInstance(proxy.getId(), locator.getLevelWiseResources(locator.getLevelID("Proxy")).get(i));
+                proxy.setParentId(cloud.getId()); // setting Cloud as parent of the Proxy Server
+                proxy.setUplinkLatency(100); // latency of connection from Proxy Server to the Cloud is 100 ms
+                proxy.setLevel(1);
+                fogDevices.add(proxy);
+
+            }
+
+            for (int i = 0; i < locator.getLevelWiseResources(locator.getLevelID("Gateway")).size(); i++) {
+
+                FogDevice gateway = createFogDevice("gateway_" + i, 2800, 4000, 10000, 10000, 0.0, 107.339, 83.4333, MicroserviceFogDevice.FCN);
+                locator.linkDataWithInstance(gateway.getId(), locator.getLevelWiseResources(locator.getLevelID("Gateway")).get(i));
+                gateway.setParentId(locator.determineParent(gateway.getId(), References.SETUP_TIME));
+                gateway.setUplinkLatency(4);
+                gateway.setLevel(2);
+                fogDevices.add(gateway);
+            }
+
+        }
+    }
+
+    private static void createMobileUser(int userId, Application app, String datasetReference) throws IOException {
+
+        for (int id = 1; id <= numberOfMobileUser; id++)
+            userMobilityPattern.put(id, References.DIRECTIONAL_MOBILITY);
+
+        locator.parseUserInfo(userMobilityPattern, datasetReference);
+
+        List<String> mobileUserDataIds = locator.getMobileUserDataId();
+
+        for (int i = 0; i < numberOfMobileUser; i++) {
+            FogDevice mobile = addMobile("mobile_" + i, userId, app, References.NOT_SET); // adding mobiles to the physical topology. Smartphones have been modeled as fog devices as well.
+            mobile.setUplinkLatency(2); // latency of connection between the smartphone and proxy server is 2 ms
+            locator.linkDataWithInstance(mobile.getId(), mobileUserDataIds.get(i));
+            mobile.setLevel(3);
+
+            fogDevices.add(mobile);
+        }
+
+    }
+
+    /**
+     * Creates a vanilla fog device
+     *
+     * @param nodeName    name of the device to be used in simulation
+     * @param mips        MIPS
+     * @param ram         RAM
+     * @param upBw        uplink bandwidth
+     * @param downBw      downlink bandwidth
+     * @param ratePerMips cost rate per MIPS used
+     * @param busyPower
+     * @param idlePower
+     * @return
+     */
+    private static MicroserviceFogDevice createFogDevice(String nodeName, long mips,
+                                                         int ram, long upBw, long downBw, double ratePerMips, double busyPower, double idlePower, String deviceType) {
+
+        List<Pe> peList = new ArrayList<Pe>();
+
+        // 3. Create PEs and add these into a list.
+        peList.add(new Pe(0, new PeProvisionerOverbooking(mips))); // need to store Pe id and MIPS Rating
+
+        int hostId = FogUtils.generateEntityId();
+        long storage = 1000000; // host storage
+        int bw = 10000;
+
+        PowerHost host = new PowerHost(
+                hostId,
+                new RamProvisionerSimple(ram),
+                new BwProvisionerOverbooking(bw),
+                storage,
+                peList,
+                new StreamOperatorScheduler(peList),
+                new FogLinearPowerModel(busyPower, idlePower)
+        );
+
+        List<Host> hostList = new ArrayList<Host>();
+        hostList.add(host);
+
+        String arch = "x86"; // system architecture
+        String os = "Linux"; // operating system
+        String vmm = "Xen";
+        double time_zone = 10.0; // time zone this resource located
+        double cost = 3.0; // the cost of using processing in this resource
+        double costPerMem = 0.05; // the cost of using memory in this resource
+        double costPerStorage = 0.001; // the cost of using storage in this
+        // resource
+        double costPerBw = 0.0; // the cost of using bw in this resource
+        LinkedList<Storage> storageList = new LinkedList<Storage>(); // we are not adding SAN
+        // devices by now
+
+        FogDeviceCharacteristics characteristics = new FogDeviceCharacteristics(
+                arch, os, vmm, host, time_zone, cost, costPerMem,
+                costPerStorage, costPerBw);
+
+        MicroserviceFogDevice fogdevice = null;
+        try {
+            fogdevice = new MicroserviceFogDevice(nodeName, characteristics,
+                    new AppModuleAllocationPolicy(hostList), storageList, 10, upBw, downBw, 10000, 0, ratePerMips, deviceType);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return fogdevice;
+    }
+
+    private static FogDevice addMobile(String name, int userId, Application app, int parentId) {
+        FogDevice mobile = createFogDevice(name, 200, 2048, 10000, 270, 0, 87.53, 82.44, MicroserviceFogDevice.CLIENT);
+        mobile.setParentId(parentId);
+        //locator.setInitialLocation(name,drone.getId());
+        Sensor mobileSensor = new Sensor("s-" + name, "SENSOR", userId, app.getAppId(), new DeterministicDistribution(SENSOR_TRANSMISSION_TIME)); // inter-transmission time of EEG sensor follows a deterministic distribution
+        mobileSensor.setApp(app);
+        sensors.add(mobileSensor);
+        Actuator mobileDisplay = new Actuator("a-" + name, userId, app.getAppId(), "DISPLAY");
+        actuators.add(mobileDisplay);
+
+        mobileSensor.setGatewayDeviceId(mobile.getId());
+        mobileSensor.setLatency(6.0);  // latency of connection between EEG sensors and the parent Smartphone is 6 ms
+
+        mobileDisplay.setGatewayDeviceId(mobile.getId());
+        mobileDisplay.setLatency(1.0);  // latency of connection between Display actuator and the parent Smartphone is 1 ms
+        mobileDisplay.setApp(app);
+
+        return mobile;
+    }
+
+
+    @SuppressWarnings({"serial"})
+    private static Application createApplication(String appId, int userId) {
+
+        Application application = Application.createApplication(appId, userId);
+
+        /*
+         * Adding modules (vertices) to the application model (directed graph)
+         */
+        application.addAppModule("clientModule", 128, 150, 100);
+        application.addAppModule("mService1", 512, 250, 200);
+        application.addAppModule("mService2", 512, 350, 200);
+        application.addAppModule("mService3", 2048, 450, 1000);
+
+        /*
+         * Connecting the application modules (vertices) in the application model (directed graph) with edges
+         */
+
+        application.addAppEdge("SENSOR", "clientModule", 1000, 500, "SENSOR", Tuple.UP, AppEdge.SENSOR);
+        application.addAppEdge("clientModule", "mService1", 2000, 500, "RAW_DATA", Tuple.UP, AppEdge.MODULE);
+        application.addAppEdge("mService1", "mService2", 2500, 500, "FILTERED_DATA1", Tuple.UP, AppEdge.MODULE);
+        application.addAppEdge("mService1", "mService3", 4000, 500, "FILTERED_DATA2", Tuple.UP, AppEdge.MODULE);
+
+        application.addAppEdge("mService2", "clientModule", 14, 500, "RESULT1", Tuple.DOWN, AppEdge.MODULE);
+        application.addAppEdge("mService3", "clientModule", 28, 500, "RESULT2", Tuple.DOWN, AppEdge.MODULE);
+        application.addAppEdge("clientModule", "DISPLAY", 14, 500, "RESULT1_DISPLAY", Tuple.DOWN, AppEdge.ACTUATOR);
+        application.addAppEdge("clientModule", "DISPLAY", 14, 500, "RESULT2_DISPLAY", Tuple.DOWN, AppEdge.ACTUATOR);
+
+
+        /*
+         * Defining the input-output relationships (represented by selectivity) of the application modules.
+         */
+        application.addTupleMapping("clientModule", "SENSOR", "RAW_DATA", new FractionalSelectivity(0.9));
+        application.addTupleMapping("mService1", "RAW_DATA", "FILTERED_DATA1", new FractionalSelectivity(1.0));
+        application.addTupleMapping("mService1", "RAW_DATA", "FILTERED_DATA2", new FractionalSelectivity(1.0));
+        application.addTupleMapping("mService2", "FILTERED_DATA1", "RESULT1", new FractionalSelectivity(1.0));
+        application.addTupleMapping("mService3", "FILTERED_DATA2", "RESULT2", new FractionalSelectivity(1.0));
+        application.addTupleMapping("clientModule", "RESULT1", "RESULT1_DISPLAY", new FractionalSelectivity(1.0));
+        application.addTupleMapping("clientModule", "RESULT2", "RESULT2_DISPLAY", new FractionalSelectivity(1.0));
+
+        application.setSpecialPlacementInfo("mService3", "cloud");
+        if (CLOUD) {
+            application.setSpecialPlacementInfo("mService1", "cloud");
+            application.setSpecialPlacementInfo("mService2", "cloud");
+        }
+
+        final AppLoop loop1 = new AppLoop(new ArrayList<String>() {{
+            add("SENSOR");
+            add("clientModule");
+            add("mService1");
+            add("mService2");
+            add("clientModule");
+            add("DISPLAY");
+        }});
+
+        List<AppLoop> loops = new ArrayList<AppLoop>() {{
+            add(loop1);
+        }};
+        application.setLoops(loops);
+
+
+//        application.createDAG();
+
+        return application;
+    }
+
+
+}
